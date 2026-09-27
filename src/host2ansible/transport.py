@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import re
+import os
+import selectors
+import signal
+import time
 import subprocess
 from dataclasses import dataclass
 
@@ -28,31 +32,53 @@ class CommandResult:
     truncated: bool = False
 
 
-def _clip(data: bytes | None) -> tuple[bytes, bool]:
-    blob = data or b""
-    if len(blob) > MAX_COMMAND_BYTES:
-        return blob[:MAX_COMMAND_BYTES], True
-    return blob, False
-
-
-def run_local(cmd: list[str], timeout: float, remote_argv: list[str]) -> CommandResult:
+def run_local(cmd: list[str], timeout: float, remote_argv: list[str], *, cwd=None) -> CommandResult:
+    """Bound both streams while reading; kill descendants on timeout or overflow."""
     try:
-        proc = subprocess.run(cmd, capture_output=True, timeout=timeout)
-    except subprocess.TimeoutExpired as exc:
-        stdout, truncated = _clip(exc.stdout if isinstance(exc.stdout, bytes) else None)
-        stderr, _ = _clip(exc.stderr if isinstance(exc.stderr, bytes) else None)
-        return CommandResult(remote_argv, 124, stdout, stderr, timed_out=True, truncated=truncated)
+        proc = subprocess.Popen(cmd, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, start_new_session=True, cwd=cwd)
     except OSError as exc:
         raise TransportError(str(exc)) from exc
-    stdout, truncated = _clip(proc.stdout)
-    stderr, err_truncated = _clip(proc.stderr)
-    return CommandResult(
-        remote_argv,
-        proc.returncode,
-        stdout,
-        stderr,
-        truncated=truncated or err_truncated,
-    )
+    buffers = [bytearray(), bytearray()]
+    deadline = time.monotonic() + timeout
+    timed_out = truncated = False
+    try:
+        with selectors.DefaultSelector() as selector:
+            selector.register(proc.stdout, selectors.EVENT_READ, 0)
+            selector.register(proc.stderr, selectors.EVENT_READ, 1)
+            while selector.get_map():
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    timed_out = True
+                    break
+                for key, _ in selector.select(min(remaining, 0.1)):
+                    chunk = os.read(key.fileobj.fileno(), 65536)
+                    if not chunk:
+                        selector.unregister(key.fileobj)
+                        continue
+                    buffer = buffers[key.data]
+                    available = MAX_COMMAND_BYTES - len(buffer)
+                    buffer.extend(chunk[:available])
+                    if len(chunk) > available:
+                        truncated = True
+                        break
+                if truncated:
+                    break
+            if not timed_out and not truncated:
+                try:
+                    proc.wait(timeout=max(0, deadline - time.monotonic()))
+                except subprocess.TimeoutExpired:
+                    timed_out = True
+    finally:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        proc.wait()
+        proc.stdout.close()
+        proc.stderr.close()
+    return CommandResult(remote_argv, 124 if timed_out else 125 if truncated else proc.returncode,
+                         bytes(buffers[0]), bytes(buffers[1]), timed_out=timed_out, truncated=truncated)
 
 
 class LocalTransport:

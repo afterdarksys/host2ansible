@@ -158,20 +158,25 @@ class Session:
     def exists(self, path: str) -> bool:
         return self.run(["test", "-e", path]).rc == 0
 
-    def stat(self, path: str) -> tuple[int, str] | None:
+    def stat(self, path: str) -> tuple[int, str, str, str] | None:
         # -L: /etc/os-release is often a symlink. Plain stat reports the link's length.
-        result = self.run(["stat", "-L", "-c", "%s %a", "--", path])
+        result = self.run(["stat", "-L", "-c", "%s %a %U %G", "--", path])
         if result.rc != 0 or result.timed_out:
             return None
         parts = result.stdout.split()
-        if len(parts) != 2 or not parts[0].isdigit() or not parts[1].isdigit():
+        if len(parts) != 4 or not parts[0].isdigit() or not parts[1].isdigit():
             return None
         mode = parts[1].decode()
         if len(mode) > 4:
             return None
-        return int(parts[0]), mode.zfill(4)
+        owner, group = (part.decode("utf-8", "replace") for part in parts[2:])
+        if any(not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]*[$]?", name) or name == "UNKNOWN"
+               for name in (owner, group)):
+            self.gaps.append(f"unresolved file ownership: {path}")
+            return None
+        return int(parts[0]), mode.zfill(4), owner, group
 
-    def read_file(self, path: str) -> tuple[bytes, str] | None:
+    def read_file(self, path: str) -> tuple[bytes, str, str, str] | None:
         try:
             path = assert_file(path)
         except PathDenied as exc:
@@ -180,7 +185,7 @@ class Session:
         meta = self.stat(path)
         if meta is None:
             return None
-        size, mode = meta
+        size, mode, owner, group = meta
         if size > MAX_FILE_BYTES:
             self.gaps.append(f"{path} is {size} bytes; not collected")
             return None
@@ -199,7 +204,7 @@ class Session:
                 self.gaps.append(f"short read of {path}")
                 return None
             data = body.stdout
-        return data, mode
+        return data, mode, owner, group
 
     def keep(self, relpath: str, data: bytes) -> None:
         self.stored += len(data)
@@ -475,6 +480,7 @@ def _glob(session: Session, service: str, spec) -> tuple[list[dict], bool]:
     if listed is None:
         return [], not spec.optional
     files = []
+    incomplete = False
     for path in listed:
         if path != spec.root and not path.startswith(spec.root.rstrip("/") + "/"):
             session.gaps.append(f"ignoring path outside {spec.root}: {path}")
@@ -482,7 +488,9 @@ def _glob(session: Session, service: str, spec) -> tuple[list[dict], bool]:
         record = _one_file(session, service, path, optional=True)
         if record:
             files.append(record)
-    return files, False
+        else:
+            incomplete = True
+    return files, incomplete
 
 
 def _one_file(session: Session, service: str, path: str, optional: bool) -> dict | None:
@@ -493,13 +501,15 @@ def _one_file(session: Session, service: str, path: str, optional: bool) -> dict
     loaded = session.read_file(path)
     if loaded is None:
         return None
-    data, mode = loaded
+    data, mode, owner, group = loaded
     rel = "files" + path
     session.keep(rel, data)
     return {
         "path": path,
         "relpath": rel,
         "mode": mode,
+        "owner": owner,
+        "group": group,
         "sha256": hashlib.sha256(data).hexdigest(),
         "bytes": len(data),
         "service": service,

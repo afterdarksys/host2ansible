@@ -142,6 +142,8 @@ def assert_file(path: str) -> str:
         path.startswith("/etc/sudoers.d/") and path.count("/") == 3 and base not in {".", ".."}
     ):
         return path
+    if _under(path, "/var/lib/pgsql") and base in PG_CONFIG_NAMES:
+        return path
     denied = _denied_prefix(path)
     if denied:
         raise PathDenied(f"refusing to read {path}")

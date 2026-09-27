@@ -73,7 +73,8 @@ def test_container_investigate_then_build(tmp_path: Path):
             env=env,
             capture_output=True,
             text=True,
-            timeout=120,
+            # Discovery runs over 100 Docker exec probes; allow slower Docker VMs.
+            timeout=300,
         )
         assert proc.returncode == 0, proc.stderr
         bundle_dir = out / "box-1"

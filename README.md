@@ -2,7 +2,7 @@
 
 Investigate a Linux host without changing it, then render Ansible that can rebuild that host somewhere else.
 
-The investigated machine is never the deploy target. `investigate` only reads. `build` only writes files on the machine where you run it. `run_converted.py` refuses an inventory whose `ansible_host` is an address collected from the source.
+The investigated machine is never the deploy target. `investigate` only reads. `build` only writes files on the machine where you run it. `run_converted.py` resolves the inventory with `ansible-inventory`, checks every target in `converted` against the collected source addresses, and executes a private snapshot with pinned destination IPs. INI and YAML inventories, inherited host variables, DNS aliases, and IPv6 addresses are checked. Missing source addresses, unresolved hosts, and connection-redirection overrides are refused unless `--allow-source-address` is explicitly supplied.
 
 ```bash
 python3 -m venv .venv
@@ -21,7 +21,7 @@ host2ansible build --from ./investigations/web-1
 python3 investigations/web-1/run_converted.py test
 ```
 
-Copy `investigations/<hostname>/ansible/` to the controller that will install a new machine. Edit `inventory.example.ini` into a real inventory, fill `group_vars/all/secrets.yml`, then:
+Copy the complete `investigations/<hostname>/` bundle to the controller that will install a new machine, and install host2ansible and Ansible there. From the bundle directory, edit `ansible/inventory.example.ini` into a real inventory, fill `ansible/group_vars/all/secrets.yml`, then:
 
 ```bash
 python3 run_converted.py execute --inventory ansible/inventory.ini --yes
@@ -45,6 +45,8 @@ OS family (Debian/Ubuntu or RHEL/Rocky and their derivatives), hostname, package
 | node_exporter, prometheus, grafana | monitoring config |
 
 It does not read `/etc/shadow`, SSH host private keys, or home directories. A file whose first line is a PEM private key is not stored. Other password-shaped values stay in the investigation bundle (mode `0600`) and become `{{ h2a_secret_<service>_<n> }}` in the Ansible tree.
+
+Collected files retain their mode, named owner, and named group. Review `h2a_owner_map` and `h2a_group_map` in `ansible/group_vars/all/main.yml` before deployment; the mapped accounts must exist on the destination (typically created by the service package). Older bundles without ownership metadata must be investigated again before building. Numeric UID/GID assignments are not copied between machines.
 
 ## Custom application profiles
 
@@ -85,12 +87,14 @@ ansible:
     state: started
     enabled: true
   validate:
-    - argv: ["myapp", "--health"]
+    - argv: ["test", "-f", "/etc/myapp/config.yaml"]
 ```
 
-`argv` is a list, never a shell string. Shells, interpreters, and commands that change the host are rejected when the profile is loaded, before anything is contacted. Unknown keys are rejected. Trees cannot be `/`, `/etc`, `/home`, `/var/lib/docker`, `/var/lib/rancher`, or a Postgres data directory.
+`argv` is a list, never a shell string. The whole argument sequence is checked against audited read forms before contacting a host. Repeated SQL commands, output files, mutating `find` predicates, and extra flags are rejected. SQL collection permits only `psql -X -c "SHOW setting"` or `SELECT version()`; `-X` disables startup-file commands. Custom applications may use exactly `--version`; other commands require an audited grammar in the guard. Profiles and installed executable implementations remain trusted operator inputs. Unknown keys are rejected. Trees cannot be `/`, `/etc`, `/home`, `/var/lib/docker`, `/var/lib/rancher`, or a Postgres data directory.
 
 Commands are evidence. The files, trees, and named globs are what the role copies.
+
+Collection stops a command as soon as either stdout or stderr exceeds 1 MB. Timeouts and output limits terminate the local process group; incomplete output is not successful evidence.
 
 ## Transports
 

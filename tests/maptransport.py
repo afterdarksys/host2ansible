@@ -44,7 +44,7 @@ class MapTransport:
         path = argv[-1]
         if path not in self.files:
             return CommandResult(argv, 1, b"", b"missing\n")
-        return CommandResult(argv, 0, f"{len(self.files[path])} 640\n".encode(), b"")
+        return CommandResult(argv, 0, f"{len(self.files[path])} 640 root root\n".encode(), b"")
 
     def do_head(self, argv: list[str]) -> CommandResult:
         count = int(argv[argv.index("-c") + 1])

@@ -29,7 +29,7 @@ def test_allows_reads():
         ["iptables", "-S"],
         ["iptables-save"],
         ["psql", "--version"],
-        ["psql", "-c", "SHOW config_file"],
+        ["psql", "-X", "-c", "SHOW config_file"],
         ["docker", "ps"],
         ["k3s", "--version"],
         ["postconf", "-n"],

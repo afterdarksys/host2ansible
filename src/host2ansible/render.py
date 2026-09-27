@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 from pathlib import Path
 
@@ -121,6 +122,16 @@ def _role(
     return hits, counter
 
 
+def _ownership(record: dict) -> dict:
+    values = {}
+    for field in ("owner", "group"):
+        name = record.get(field)
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]*[$]?", name) or name == "UNKNOWN":
+            raise BuildError(f"{record['path']} lacks named {field}; investigate again before building")
+        values[field] = "{{ h2a_" + field + "_map['" + name + "'] }}"
+    return values
+
+
 def _files(
     role: Path, bundle_dir: Path, service: dict, counter: int, notify: bool
 ) -> tuple[list[dict], list[SecretHit], int]:
@@ -149,13 +160,13 @@ def _files(
             dest = role / "templates" / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_text(to_template(tokenized, found), encoding="utf-8")
-            body = {"src": rel, "dest": record["path"], "mode": mode}
+            body = {"src": rel, "dest": record["path"], "mode": mode, **_ownership(record)}
             task = {"name": f"Template {record['path']}", "ansible.builtin.template": body}
         else:
             dest = role / "files" / rel
             dest.parent.mkdir(parents=True, exist_ok=True)
             dest.write_bytes(data)
-            body = {"src": rel, "dest": record["path"], "mode": mode}
+            body = {"src": rel, "dest": record["path"], "mode": mode, **_ownership(record)}
             if record["path"] == "/etc/sudoers":
                 body["validate"] = "/usr/sbin/visudo -cf %s"
             if record["path"] == "/etc/ssh/sshd_config":
@@ -191,7 +202,7 @@ def _firewall_role(
             dest.write_text(to_template(tokenized, hits), encoding="utf-8")
             install = {
                 "name": "Install fwng policy",
-                "ansible.builtin.template": {"src": "fwng.yaml.j2", "dest": "/etc/fwng.yaml", "mode": "0640"},
+                "ansible.builtin.template": {"src": "fwng.yaml.j2", "dest": "/etc/fwng.yaml", "mode": policy.get("mode", "0640"), **_ownership(policy)},
             }
         else:
             dest = ansible / "roles" / "firewall" / "files" / "fwng.yaml"
@@ -199,7 +210,7 @@ def _firewall_role(
             dest.write_bytes(data)
             install = {
                 "name": "Install fwng policy",
-                "ansible.builtin.copy": {"src": "fwng.yaml", "dest": "/etc/fwng.yaml", "mode": "0640"},
+                "ansible.builtin.copy": {"src": "fwng.yaml", "dest": "/etc/fwng.yaml", "mode": policy.get("mode", "0640"), **_ownership(policy)},
             }
         tasks.extend(
             [
@@ -301,6 +312,11 @@ def _vars(ansible: Path, bundle: dict, hits: list[SecretHit]) -> None:
         "h2a_os_family": bundle["os"]["family"],
         "h2a_apply_firewall": False,
     }
+    records = [record for service in bundle["services"] for record in service["files"]]
+    if bundle["firewall"].get("policy"):
+        records.append(bundle["firewall"]["policy"])
+    for field in ("owner", "group"):
+        main[f"h2a_{field}_map"] = {r[field]: r[field] for r in records if field in r}
     _write_yaml(group / "main.yml", main)
     lines = [
         "---",
@@ -348,7 +364,8 @@ Services: {services}
 
 This directory is the investigation. `ansible/` is what you copy to the machine
 that will deploy a **different** host. `run_converted.py` refuses an inventory
-whose `ansible_host` is one of the addresses collected here.
+whose resolved targets overlap the addresses collected here. It executes a checked inventory snapshot.
+Review `h2a_owner_map` and `h2a_group_map` in `ansible/group_vars/all/main.yml`; mapped accounts must exist on the new host.
 
 ```bash
 python3 run_converted.py test
