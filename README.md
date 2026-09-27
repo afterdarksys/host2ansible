@@ -8,12 +8,16 @@ The investigated machine is never the deploy target. `investigate` only reads. `
 python3 -m venv .venv
 .venv/bin/pip install -e '.[dev]'
 
+# bin/host2ansible is the command. It uses .venv when that exists.
+# Link it once if you want to type `host2ansible` from anywhere:
+#   ln -sf "$PWD/bin/host2ansible" ~/bin/host2ansible
+
 # Read-only. From your laptop, or with --transport local on the host itself.
-.venv/bin/host2ansible investigate --transport ssh --destination root@web-1 \
+host2ansible investigate --transport ssh --destination root@web-1 \
   --profile-dir ./profiles --out ./investigations
 
 # On the machine that will author the deploy, not on the host you just read.
-.venv/bin/host2ansible build --from ./investigations/web-1
+host2ansible build --from ./investigations/web-1
 python3 investigations/web-1/run_converted.py test
 ```
 

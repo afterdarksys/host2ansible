@@ -1,0 +1,21 @@
+#!/bin/sh
+# Checkout wrapper. Typing `host2ansible` does not require the setuptools
+# console script that `pip install` writes into .venv/bin.
+set -eu
+
+here=$(CDPATH= cd -- "$(dirname "$0")" && pwd)
+if [ -L "$0" ]; then
+  target=$(readlink "$0")
+  case $target in
+    /*) script=$target ;;
+    *) script=$here/$target ;;
+  esac
+  here=$(CDPATH= cd -- "$(dirname "$script")" && pwd)
+fi
+root=$(CDPATH= cd -- "$here/.." && pwd)
+
+export PYTHONPATH="$root/src${PYTHONPATH:+:$PYTHONPATH}"
+if [ -x "$root/.venv/bin/python" ]; then
+  exec "$root/.venv/bin/python" -m host2ansible "$@"
+fi
+exec python3 -m host2ansible "$@"
