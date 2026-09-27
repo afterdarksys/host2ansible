@@ -1,0 +1,26 @@
+name: postfix
+description: Postfix mail server
+read_only: true
+detect:
+  any:
+    - path: /etc/postfix/main.cf
+    - systemd: postfix.service
+collect:
+  trees:
+    - path: /etc/postfix
+      exclude_suffixes: [".bak", ".dpkg-dist", ".rpmnew"]
+  commands:
+    - id: nondefault
+      argv: ["postconf", "-n"]
+      optional: true
+ansible:
+  apply: auto
+  packages:
+    debian: [postfix]
+    redhat: [postfix]
+  service:
+    name: postfix
+    state: started
+    enabled: true
+  validate:
+    - argv: ["postfix", "check"]

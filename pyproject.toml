@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "host2ansible"
+version = "0.1.0"
+description = "Investigate a Linux host read-only and render Ansible that can rebuild it elsewhere"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = [
+  "PyYAML>=6,<7",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+host2ansible = "host2ansible.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+host2ansible = ["builtin_profiles/*.yaml"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = [".", "src"]

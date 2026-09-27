@@ -1,0 +1,32 @@
+name: docker
+description: Docker engine. Container runtime state is not copied.
+read_only: true
+detect:
+  any:
+    - path: /usr/bin/docker
+    - path: /var/run/docker.sock
+    - systemd: docker.service
+    - command_ok: ["docker", "version"]
+collect:
+  trees:
+    - path: /etc/docker
+      optional: true
+  commands:
+    - id: version
+      argv: ["docker", "version"]
+      optional: true
+    - id: ps
+      argv: ["docker", "ps"]
+      optional: true
+ansible:
+  apply: auto
+  packages:
+    debian: [docker.io]
+    redhat: [docker]
+  service:
+    name: docker
+    state: started
+    enabled: true
+  note: >
+    Running containers and images are not replayed. Compose files under
+    /etc/docker are copied when they were present. /var/lib/docker is never walked.

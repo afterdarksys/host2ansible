@@ -1,0 +1,22 @@
+name: pgbouncer
+description: PgBouncer connection pooler
+read_only: true
+detect:
+  any:
+    - path: /etc/pgbouncer/pgbouncer.ini
+    - systemd: pgbouncer.service
+collect:
+  trees:
+    - path: /etc/pgbouncer
+      exclude_suffixes: [".bak"]
+ansible:
+  apply: auto
+  packages:
+    debian: [pgbouncer]
+    redhat: [pgbouncer]
+  service:
+    name: pgbouncer
+    state: started
+    enabled: true
+  validate:
+    - argv: ["test", "-f", "/etc/pgbouncer/pgbouncer.ini"]

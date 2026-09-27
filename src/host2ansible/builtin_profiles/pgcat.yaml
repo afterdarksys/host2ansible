@@ -1,0 +1,22 @@
+name: pgcat
+description: PgCat pooler
+read_only: true
+detect:
+  any:
+    - path: /etc/pgcat/pgcat.toml
+    - path: /etc/pgcat.toml
+    - systemd: pgcat.service
+collect:
+  trees:
+    - path: /etc/pgcat
+      optional: true
+  files:
+    - path: /etc/pgcat.toml
+      optional: true
+ansible:
+  apply: auto
+  service:
+    name: pgcat
+    state: started
+    enabled: true
+  note: PgCat has no distro package in this profile. The rendered role copies config only.

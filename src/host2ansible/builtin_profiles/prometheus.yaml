@@ -1,0 +1,22 @@
+name: prometheus
+description: Prometheus server configuration
+read_only: true
+detect:
+  any:
+    - path: /etc/prometheus/prometheus.yml
+    - systemd: prometheus.service
+collect:
+  trees:
+    - path: /etc/prometheus
+      exclude_suffixes: [".db"]
+ansible:
+  apply: auto
+  packages:
+    debian: [prometheus]
+    redhat: [prometheus]
+  service:
+    name: prometheus
+    state: started
+    enabled: true
+  validate:
+    - argv: ["promtool", "check", "config", "/etc/prometheus/prometheus.yml"]

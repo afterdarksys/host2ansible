@@ -1,0 +1,25 @@
+name: node_exporter
+description: Prometheus node exporter
+read_only: true
+detect:
+  any:
+    - systemd: node_exporter.service
+    - systemd: prometheus-node-exporter.service
+    - path: /etc/default/prometheus-node-exporter
+collect:
+  files:
+    - path: /etc/default/prometheus-node-exporter
+      optional: true
+    - path: /etc/sysconfig/node_exporter
+      optional: true
+ansible:
+  apply: auto
+  packages:
+    debian: [prometheus-node-exporter]
+    redhat: [golang-github-prometheus-node-exporter]
+  service:
+    names:
+      debian: prometheus-node-exporter
+      redhat: node_exporter
+    state: started
+    enabled: true

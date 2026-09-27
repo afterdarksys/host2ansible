@@ -1,0 +1,26 @@
+name: nginx
+description: nginx web server
+read_only: true
+detect:
+  any:
+    - path: /etc/nginx/nginx.conf
+    - systemd: nginx.service
+collect:
+  trees:
+    - path: /etc/nginx
+      exclude_suffixes: [".dpkg-dist", ".dpkg-old", ".bak", ".rpmsave"]
+  commands:
+    - id: version
+      argv: ["nginx", "-v"]
+      optional: true
+ansible:
+  apply: auto
+  packages:
+    debian: [nginx]
+    redhat: [nginx]
+  service:
+    name: nginx
+    state: started
+    enabled: true
+  validate:
+    - argv: ["nginx", "-t"]

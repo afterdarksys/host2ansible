@@ -1,0 +1,22 @@
+name: pgdog
+description: PgDog pooler
+read_only: true
+detect:
+  any:
+    - path: /etc/pgdog/pgdog.toml
+    - path: /etc/pgdog.toml
+    - systemd: pgdog.service
+collect:
+  trees:
+    - path: /etc/pgdog
+      optional: true
+  files:
+    - path: /etc/pgdog.toml
+      optional: true
+ansible:
+  apply: auto
+  service:
+    name: pgdog
+    state: started
+    enabled: true
+  note: PgDog has no distro package in this profile. The rendered role copies config only.

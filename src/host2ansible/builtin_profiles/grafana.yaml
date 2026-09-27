@@ -1,0 +1,21 @@
+name: grafana
+description: Grafana configuration
+read_only: true
+detect:
+  any:
+    - path: /etc/grafana/grafana.ini
+    - systemd: grafana-server.service
+collect:
+  trees:
+    - path: /etc/grafana
+      exclude_names: ["grafana.db"]
+      exclude_suffixes: [".db"]
+ansible:
+  apply: auto
+  packages:
+    debian: [grafana]
+    redhat: [grafana]
+  service:
+    name: grafana-server
+    state: started
+    enabled: true

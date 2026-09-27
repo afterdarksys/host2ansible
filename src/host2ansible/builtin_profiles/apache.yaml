@@ -1,0 +1,32 @@
+name: apache
+description: Apache HTTP server
+read_only: true
+detect:
+  any:
+    - path: /etc/apache2/apache2.conf
+    - path: /etc/httpd/conf/httpd.conf
+    - systemd: apache2.service
+    - systemd: httpd.service
+collect:
+  trees:
+    - path: /etc/apache2
+      optional: true
+      exclude_suffixes: [".dpkg-dist", ".dpkg-old", ".bak"]
+    - path: /etc/httpd
+      optional: true
+      exclude_suffixes: [".rpmnew", ".rpmsave", ".bak"]
+  commands:
+    - id: version
+      argv: ["apache2ctl", "-v"]
+      optional: true
+ansible:
+  apply: auto
+  packages:
+    debian: [apache2]
+    redhat: [httpd]
+  service:
+    names:
+      debian: apache2
+      redhat: httpd
+    state: started
+    enabled: true

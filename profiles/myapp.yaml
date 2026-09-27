@@ -1,0 +1,24 @@
+name: myapp
+description: Example custom service. Copy this file and change the paths.
+read_only: true
+detect:
+  any:
+    - path: /etc/myapp/config.yaml
+    - systemd: myapp.service
+collect:
+  trees:
+    - path: /etc/myapp
+      exclude_suffixes: [".bak"]
+  commands:
+    - id: version
+      argv: ["myapp", "--version"]
+      optional: true
+ansible:
+  apply: auto
+  service:
+    name: myapp
+    state: started
+    enabled: true
+  validate:
+    - argv: ["test", "-f", "/etc/myapp/config.yaml"]
+  note: No package is installed. The role copies /etc/myapp and starts myapp only when the unit existed on the source.

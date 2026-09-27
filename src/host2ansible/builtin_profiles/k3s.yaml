@@ -1,0 +1,28 @@
+name: k3s
+description: k3s configuration only. Cluster data and the install script are not replayed.
+read_only: true
+detect:
+  any:
+    - path: /usr/local/bin/k3s
+    - path: /etc/rancher/k3s/config.yaml
+    - systemd: k3s.service
+    - command_ok: ["k3s", "--version"]
+collect:
+  trees:
+    - path: /etc/rancher/k3s
+      optional: true
+      exclude_names: ["k3s.yaml"]
+  commands:
+    - id: version
+      argv: ["k3s", "--version"]
+      optional: true
+ansible:
+  apply: review
+  service:
+    name: k3s
+    state: started
+    enabled: true
+  note: >
+    k3s is not installed by this role and the upstream install script is not
+    invoked. k3s.yaml (the kubeconfig) is not collected. Review the config
+    before applying site-review.yml.
